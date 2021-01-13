@@ -61,11 +61,11 @@ namespace Poker
         private Texture2D _buttonTexture;
         private const float ButtonScale = 0.15f;
 
-        private List<Button> _buttons = new List<Button>();
-        private Button _clearBetButton;
-        private Button _betButton;
-        private Button _foldButton;
-        private Button _callButton;
+        private List<ButtonElement> _buttons = new List<ButtonElement>();
+        private ButtonElement _clearBetButton;
+        private ButtonElement _betButton;
+        private ButtonElement _foldButton;
+        private ButtonElement _callButton;
 
         // Input
         private KeyboardState _previousKeyBoardState;
@@ -76,7 +76,7 @@ namespace Poker
         // General
         private GraphicsDeviceManager _graphics;
         private Texture2D _backgroundImage;
-        private SpriteBatch _spriteBatch;
+        
         private User _user;
         private User _enemy;
         private Table _table;
@@ -88,6 +88,7 @@ namespace Poker
         private readonly string _clientKey = GetRandomString(16);
         private const string ServerPassword = "test1234";
         private bool _host;
+        private SpriteBatch _spriteBatch;
 
         public PokerGame(bool host)
         {
@@ -116,32 +117,9 @@ namespace Poker
         protected override void LoadContent()
         {
             _spriteBatch = new SpriteBatch(GraphicsDevice);
-            _font = Content.Load<SpriteFont>("font");
-            _buttonFont = Content.Load<SpriteFont>("ButtonFont");
-            _buttonTexture = Content.Load<Texture2D>("button");
-            _backgroundImage = Content.Load<Texture2D>("pokertable");
-
-            // Texture splitting
-            _cardTexturesInitial = Content.Load<Texture2D>("cards");
-            _chipTexturesInitial = Content.Load<Texture2D>("chips");
-            _cardTextures = Split(_cardTexturesInitial, _cardWidth, _cardHeight);
-            _chipTextures = Split(_chipTexturesInitial, _initialChipWidth, _initialChipHeight);
 
             // Scaling texture sizes
-            _scaleX = 1 / _resolution.ScreenScale.X;
-            _scaleY = 1 / _resolution.ScreenScale.Y;
-            _marginX *= _scaleX;
-            _marginY *= _scaleY;
 
-            _initialChipHeight = (int) (_initialChipHeight * _scaleY);
-            _initialChipWidth = (int) (_initialChipWidth * _scaleX);
-            _chipWidth = (int) (_initialChipWidth * ChipScale);
-            _chipHeight = (int) (_initialChipWidth * ChipScale);
-            _allChipsHeight = (int) (ChipsAmount * _chipHeight + (ChipsAmount - 1) * _marginY);
-
-            _cardHeight = (int) (_cardHeight * _scaleY);
-            _cardWidth = (int) (_cardWidth * _scaleX);
-            _userCardsWidth = (int) (UserCardsAmount * _cardWidth + (UserCardsAmount - 1) * _marginX);
 
             // Chips and CardsDeck Initialization
             if (_host)
@@ -165,7 +143,7 @@ namespace Poker
             _chips.Add(new Chip(100, _chipTextures[4]));
             _chips.Add(new Chip(250, _chipTextures[5]));
 
-            for (int i = 0; i < ChipsAmount; i++)
+            for (var i = 0; i < ChipsAmount; i++)
             {
                 // Y Center
                 // float y = resolution.VirtualScreen.Y / 2 - (float) AllChipsHeight / 2 + i * (ChipHeight + YMargin);
@@ -217,7 +195,7 @@ namespace Poker
             
             // Buttons
             // Clear Bet
-            _clearBetButton = new Button(
+            _clearBetButton = new ButtonElement(
                 _buttonTexture,
                 new Vector2(
                     _uiPositions[1].X,
@@ -228,7 +206,7 @@ namespace Poker
             );
 
             // Bet
-            _betButton = new Button(
+            _betButton = new ButtonElement(
                 _buttonTexture,
                 new Vector2(
                     _clearBetButton.Position.X + _buttonTexture.Width * ButtonScale + _marginX,
@@ -239,7 +217,7 @@ namespace Poker
             );
 
             // Fold
-            _foldButton = new Button(
+            _foldButton = new ButtonElement(
                 _buttonTexture,
                 new Vector2(
                     _clearBetButton.Position.X,
@@ -250,7 +228,7 @@ namespace Poker
             );
 
             // Call
-            _callButton = new Button(
+            _callButton = new ButtonElement(
                 _buttonTexture,
                 new Vector2(
                     _betButton.Position.X,
@@ -316,10 +294,10 @@ namespace Poker
                     {
                         if (_user.HasAddedBet)
                         {
-                            if (_user.Cash - _user.Bets[^1] >= chip.ChipWorth)
+                            if (_user.Cash - _user.Bets[^1] >= chip.Value)
                             {
                                 // User has 0 or more money left
-                                _user.Bets[^1] += chip.ChipWorth;
+                                _user.Bets[^1] += chip.Value;
                             }
                             else
                             {
@@ -329,7 +307,7 @@ namespace Poker
                         }
                         else
                         {
-                            _user.Bets.Add(_user.Cash >= chip.ChipWorth ? chip.ChipWorth : _user.Cash);
+                            _user.Bets.Add(_user.Cash >= chip.Value ? chip.Value : _user.Cash);
                             _user.BetIsProcessed.Add(false);
                             _user.HasAddedBet = true;
                         }
@@ -428,7 +406,7 @@ namespace Poker
                 {
                     // Draw Enemy Cards
                     _spriteBatch.Draw(
-                        _enemy.Cards[i].CardTexture,
+                        _enemy.Cards[i].Texture,
                         _enemyCardsPositions[i],
                         null,
                         Color.White,
@@ -444,7 +422,7 @@ namespace Poker
                 {
                     // Draw User Cards
                     _spriteBatch.Draw(
-                        _user.Cards[i].CardTexture,
+                        _user.Cards[i].Texture,
                         _userCardsPositions[i],
                         null,
                         Color.White,
@@ -463,7 +441,7 @@ namespace Poker
                 for (int i = 0; i < _table.Cards.Count; i++)
                 {
                     _spriteBatch.Draw(
-                        _table.Cards[i].CardTexture,
+                        _table.Cards[i].Texture,
                         _tableCardsPositions[i],
                         null,
                         Color.White,
@@ -482,7 +460,7 @@ namespace Poker
                 foreach (Chip chip in _chips)
                 {
                     _spriteBatch.Draw(
-                        chip.ChipTexture,
+                        chip.Texture,
                         chip.Position,
                         null,
                         Color.White,
@@ -562,53 +540,13 @@ namespace Poker
             {
                 // Change BET to RAISE Button
                 _betButton.Text = "RAISE";
-                _betButton.TextPosition = _betButton.GetTextPosition();
+                _betButton.TextPosition = _betButton.CalculateTextPosition();
             }
             else
             {
                 _betButton.Text = "BET";
-                _betButton.TextPosition = _betButton.GetTextPosition();
+                _betButton.TextPosition = _betButton.CalculateTextPosition();
             }
-        }
-
-        private Texture2D[] Split(Texture2D original, int partWidth, int partHeight)
-        {
-            int yCount = original.Height / partHeight;
-            int xCount = original.Width / partWidth;
-
-            Texture2D[]
-                r = new Texture2D[xCount * yCount];
-
-            int dataPerPart = partWidth * partHeight;
-            Color[] originalData = new Color[original.Width * original.Height];
-            original.GetData(originalData);
-
-            int index = 0;
-            for (int y = 0;
-                y < yCount * partHeight;
-                y += partHeight)
-            for (int x = 0;
-                x < xCount * partWidth;
-                x += partWidth)
-            {
-                Texture2D part = new Texture2D(original.GraphicsDevice, partWidth, partHeight);
-                Color[] partData = new Color[dataPerPart];
-
-                for (int py = 0; py < partHeight; py++)
-                for (int px = 0; px < partWidth; px++)
-                {
-                    int partIndex = px + py * partWidth;
-                    if (y + py >= original.Height || x + px >= original.Width)
-                        partData[partIndex] = Color.Transparent;
-                    else
-                        partData[partIndex] = originalData[(x + px) + (y + py) * original.Width];
-                }
-
-                part.SetData(partData);
-                r[index++] = part;
-            }
-
-            return r;
         }
 
         private Vector2 GetMouseCoords()
@@ -640,19 +578,24 @@ namespace Poker
                     break;
                 case 1:
                     levelString = "INFO: ";
+                    Console.ForegroundColor = ConsoleColor.Blue;
                     break;
                 case 2:
                     levelString = "WARNING: ";
+                    Console.ForegroundColor = ConsoleColor.Yellow;
                     break;
                 case 3:
                     levelString = "ERROR: ";
+                    Console.ForegroundColor = ConsoleColor.Red;
                     break;
                 case 4:
                     levelString = "FATAL: ";
+                    Console.ForegroundColor = ConsoleColor.Red;
                     break;
             }
 
             Console.WriteLine(String.Concat(DateTime.Now.ToString("HH:mm:ss"), " ", levelString, message));
+            Console.ResetColor();
         }
     }
 
