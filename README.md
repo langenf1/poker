@@ -4,4 +4,5 @@
 
 This repository contains a personal project of mine, a small poker game in C#. The game is intended to be played with multiple users.
 
-## WIP!
+## Preview (WIP)
+![](preview.png)
