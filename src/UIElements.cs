@@ -7,11 +7,11 @@ namespace Poker
     public class ButtonElement : UIElement
     {
         public Vector2 TextPosition;
-        public ButtonElement(Texture2D texture, Vector2 position, string text, SpriteFont font, float scale = 1.0f)
+        public ButtonElement(Texture2D texture, Vector2 position, string text, SpriteFont font)
         {
             Texture = texture;
+            Scale = UI.ButtonScale;
             Position = position;
-            Scale = scale;
             Text = text;
             Font = font;
             Container = CreateContainer();
@@ -32,11 +32,11 @@ namespace Poker
     public class CardElement : UIElement
     {
         public Card Card;
-        public CardElement(Card card, Vector2 position, float scale = 1.0f)
+        public CardElement(Card card, Vector2 position)
         {
             Card = card;
+            Scale = UI.CardScale;
             Position = position;
-            Scale = scale;
             Container = CreateContainer();
         }
         private new Rectangle CreateContainer()
@@ -49,29 +49,23 @@ namespace Poker
     public class ChipElement : UIElement
     {
         public Chip Chip;
-        public ChipElement(Chip chip, Vector2 position, float scale = 1.0f)
+        public ChipElement(Chip chip, Vector2 position, Rectangle container)
         {
             Chip = chip;
+            Scale = UI.ChipScale;
             Position = position;
-            Scale = scale;
-            Container = CreateContainer();
-        }
-        
-        private new Rectangle CreateContainer()
-        {
-            return new Rectangle((int) Position.X, (int) Position.Y, 
-                (int) (Chip.Texture.Width * Scale), (int) (Chip.Texture.Height * Scale));
+            Container = container;
         }
     }
     
     public class InfoElement : UIElement
     {
-        public InfoElement(string text, Vector2 position, SpriteFont font, float scale = 1.0f)
+        public InfoElement(string text, Vector2 position, SpriteFont font)
         {
             Text = text;
             Position = position;
             Font = font;
-            Scale = scale;
+            Scale = 1.0f;
             Container = CreateContainer();
         }
     }

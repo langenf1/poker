@@ -15,38 +15,13 @@ namespace Poker
     public class PokerGame : Game
     {
         // Cards
-        private Texture2D _cardTexturesInitial;
-        private Texture2D[] _cardTextures;
         private List<Vector2> _userCardsPositions = new List<Vector2>();
         private List<Vector2> _enemyCardsPositions = new List<Vector2>();
         private List<Vector2> _tableCardsPositions = new List<Vector2>();
-        private int _cardWidth = 72;
-        private int _cardHeight = 96;
-        private int _userCardsWidth;
         private int _tableCardsWidth;
-        private const int UserCardsAmount = 2;
-
-        // Chips        
-        private int ChipsAmount = 4;
-        private Texture2D _chipTexturesInitial;
-        private Texture2D[] _chipTextures;
-        private List<Chip> _chips = new List<Chip>();
-        private const float ChipScale = 0.4f;
-        private int _initialChipWidth = 162;
-        private int _initialChipHeight = 162;
-        private int _chipWidth;
-        private int _chipHeight;
-        private int _allChipsHeight;
 
         // UI
-        private SpriteFont _font;
-        private SpriteFont _buttonFont;
         private Resolution _resolution = new Resolution();
-        private float _marginX = 10;
-        private float _marginY = 10;
-        private float _scaleX;
-        private float _scaleY;
-        private List<Vector2> _uiPositions = new List<Vector2>();
 
         // Strings / Info
         private string _userCash;
@@ -57,16 +32,6 @@ namespace Poker
         private int _enemyBetAmount;
         private string _pot;
 
-        // Buttons
-        private Texture2D _buttonTexture;
-        private const float ButtonScale = 0.15f;
-
-        private List<ButtonElement> _buttons = new List<ButtonElement>();
-        private ButtonElement _clearBetButton;
-        private ButtonElement _betButton;
-        private ButtonElement _foldButton;
-        private ButtonElement _callButton;
-
         // Input
         private KeyboardState _previousKeyBoardState;
         private KeyboardState _keyBoardState;
@@ -75,8 +40,7 @@ namespace Poker
 
         // General
         private GraphicsDeviceManager _graphics;
-        private Texture2D _backgroundImage;
-        
+
         private User _user;
         private User _enemy;
         private Table _table;
@@ -95,7 +59,7 @@ namespace Poker
             _host = host;
             if (_host)
             {
-                _gameServer = new GameServer(key: ServerPassword) {UserCardsAmount = UserCardsAmount};
+                _gameServer = new GameServer(key: ServerPassword);
                 ServerThread = new Thread(_gameServer.PollEvents);
             }
 
@@ -136,26 +100,8 @@ namespace Poker
                 _gameServer.ProcessRound(true);
             }
 
-            //Chips.Add(new Chip(5, ChipTextures[0]));
-            //Chips.Add(new Chip(10, ChipTextures[1]));
-            _chips.Add(new Chip(25, _chipTextures[2]));
-            _chips.Add(new Chip(50, _chipTextures[3]));
-            _chips.Add(new Chip(100, _chipTextures[4]));
-            _chips.Add(new Chip(250, _chipTextures[5]));
 
-            for (var i = 0; i < ChipsAmount; i++)
-            {
-                // Y Center
-                // float y = resolution.VirtualScreen.Y / 2 - (float) AllChipsHeight / 2 + i * (ChipHeight + YMargin);
 
-                _chips[i].Position = new Vector2(_marginX, _marginY + i * (_chipHeight + _marginY));
-                _chips[i].Container = new Rectangle(
-                    (int) _chips[i].Position.X,
-                    (int) _chips[i].Position.Y,
-                    (int) (_chipWidth + _marginX),
-                    (int) (_chipHeight + _marginY)
-                );
-            }
 
             // Add User, Enemy and Table Cards positions
             _userCardsPositions.Add(new Vector2(
@@ -182,66 +128,6 @@ namespace Poker
                         i * (_cardWidth + _marginX),
                         _resolution.VirtualScreen.Y / 2 - (float) _cardHeight / 2));
             }
-
-            // UI
-            // User
-            _uiPositions.Add(new Vector2(_chips[ChipsAmount - 1].Position.X,
-                _chips[ChipsAmount - 1].Position.Y + _chipHeight + _marginY));
-            _uiPositions.Add(new Vector2(_uiPositions[^1].X,
-                _uiPositions[^1].Y + _font.LineSpacing));
-
-            // Pot
-            _uiPositions.Add(new Vector2(_uiPositions[1].X, _uiPositions[1].Y + _font.LineSpacing));
-            
-            // Buttons
-            // Clear Bet
-            _clearBetButton = new ButtonElement(
-                _buttonTexture,
-                new Vector2(
-                    _uiPositions[1].X,
-                    _resolution.VirtualScreen.X / _scaleX - _buttonTexture.Height * ButtonScale * 2 - _marginY * 2),
-                "CLEAR BET",
-                _buttonFont,
-                ButtonScale
-            );
-
-            // Bet
-            _betButton = new ButtonElement(
-                _buttonTexture,
-                new Vector2(
-                    _clearBetButton.Position.X + _buttonTexture.Width * ButtonScale + _marginX,
-                    _clearBetButton.Position.Y),
-                "BET",
-                _buttonFont,
-                ButtonScale
-            );
-
-            // Fold
-            _foldButton = new ButtonElement(
-                _buttonTexture,
-                new Vector2(
-                    _clearBetButton.Position.X,
-                    _clearBetButton.Position.Y + _buttonTexture.Height * ButtonScale + _marginY),
-                "FOLD",
-                _buttonFont,
-                ButtonScale
-            );
-
-            // Call
-            _callButton = new ButtonElement(
-                _buttonTexture,
-                new Vector2(
-                    _betButton.Position.X,
-                    _foldButton.Position.Y),
-                "CALL",
-                _buttonFont,
-                ButtonScale
-            );
-
-            _buttons.Add(_clearBetButton);
-            _buttons.Add(_betButton);
-            _buttons.Add(_foldButton);
-            _buttons.Add(_callButton);
         }
 
         protected override void Update(GameTime gameTime)
@@ -265,10 +151,12 @@ namespace Poker
                 // Enemy UI Positions
                 // Cash/Bet Positions have the same MeasureString() for better alignment
                 _uiPositions.Add(new Vector2(
-                    _resolution.VirtualScreen.X - _font.MeasureString(_enemy.Name + "'S CASH: $" + _enemy.Cash).X - _marginX,
+                    _resolution.VirtualScreen.X - _font.MeasureString(_enemy.Name + "'S CASH: $" + _enemy.Cash).X -
+                    _marginX,
                     _marginY));
                 _uiPositions.Add(new Vector2(
-                    _resolution.VirtualScreen.X - _font.MeasureString(_enemy.Name + "'S CASH: $" + _enemy.Cash).X - _marginX,
+                    _resolution.VirtualScreen.X - _font.MeasureString(_enemy.Name + "'S CASH: $" + _enemy.Cash).X -
+                    _marginX,
                     _marginY + _font.LineSpacing));
             }
 
@@ -290,7 +178,8 @@ namespace Poker
                 Vector2 mousePos = GetMouseCoords();
                 if (!_user.HasBetted && _table.RealCardsAmount <= 5)
                 {
-                    foreach (var chip in _chips.Where(chip => chip.Container.Contains(mousePos)).Where(chip => _user.Cash > 0))
+                    foreach (var chip in _chips.Where(chip => chip.Container.Contains(mousePos))
+                        .Where(chip => _user.Cash > 0))
                     {
                         if (_user.HasAddedBet)
                         {
@@ -360,7 +249,8 @@ namespace Poker
                                 {
                                     if (_user.HasAddedBet)
                                     {
-                                        _user.Bets[^1] = Math.Min(_enemy.Bets.Sum() - _user.Bets.Sum() + _user.Bets[^1], _user.Cash);
+                                        _user.Bets[^1] = Math.Min(_enemy.Bets.Sum() - _user.Bets.Sum() + _user.Bets[^1],
+                                            _user.Cash);
                                     }
                                     else
                                     {
@@ -457,7 +347,7 @@ namespace Poker
             // Draw Chips
             if (ChipsAmount > 0)
             {
-                foreach (Chip chip in _chips)
+                foreach (var chip in _chips)
                 {
                     _spriteBatch.Draw(
                         chip.Texture,
@@ -477,52 +367,56 @@ namespace Poker
             // User/Pot Strings
             _userBetAmount = _user.HasAddedBet ? _user.Bets[^1] : 0;
             _userCash = "CASH: $" + _user.Cash;
-            _userBet = "BET:" + AddAlignmentSpaces(_font, "CASH:", "BET:") + "$" + _userBetAmount;
-            _pot = "POT:" + AddAlignmentSpaces(_font, "CASH:", "POT:") + "$" + _table.Pot;
-            _spriteBatch.DrawString(_font, _userCash, _uiPositions[0], Color.White);
-            _spriteBatch.DrawString(_font, _userBet, _uiPositions[1], Color.White);
-            _spriteBatch.DrawString(_font, _pot, _uiPositions[2], Color.White);
+            _userBet = AddAlignmentSpaces(_contentLoader.DefaultFont, "CASH:", "BET:") + "$" + _userBetAmount;
+            _pot = AddAlignmentSpaces(_contentLoader.DefaultFont, "CASH:", "POT:") + "$" + _table.Pot;
+            _spriteBatch.DrawString(_contentLoader.DefaultFont, _userCash, _uiPositions[0], Color.White);
+            _spriteBatch.DrawString(_contentLoader.DefaultFont, _userBet, _uiPositions[1], Color.White);
+            _spriteBatch.DrawString(_contentLoader.DefaultFont, _pot, _uiPositions[2], Color.White);
 
             // Enemy Strings
             _enemyBetAmount = _enemy.HasAddedBet || _enemy.HasBetted ? _enemy.Bets.Count > 0 ? _enemy.Bets[^1] : 0 : 0;
             _enemyCash = _enemy.Name + "'S CASH: $" + _enemy.Cash;
             _enemyBet = _enemy.Name + "'S BET:" + AddAlignmentSpaces(_font, "CASH:", "BET:") + "$" +
-                       _enemyBetAmount;
+                        _enemyBetAmount;
             if (_uiPositions.Count > 3)
             {
-                _spriteBatch.DrawString(_font, _enemyCash, _uiPositions[3], Color.White);
-                _spriteBatch.DrawString(_font, _enemyBet, _uiPositions[4], Color.White);
+                _spriteBatch.DrawString(_contentLoader.DefaultFont, _enemyCash, _uiPositions[3], Color.White);
+                _spriteBatch.DrawString(_contentLoader.DefaultFont, _enemyBet, _uiPositions[4], Color.White);
             }
 
             // Buttons
             foreach (var button in _buttons)
             {
                 _spriteBatch.Draw(
-                    button.ButtonTexture,
+                    _contentLoader.ButtonTexture,
                     button.Position,
                     null,
                     Color.White,
                     0f,
                     new Vector2(0, 0),
-                    new Vector2(ButtonScale, ButtonScale),
+                    new Vector2(UI.ButtonScale, UI.ButtonScale),
                     SpriteEffects.None,
                     0f
                 );
-                _spriteBatch.DrawString(_buttonFont, button.Text, button.TextPosition, Color.White);
+                _spriteBatch.DrawString(_contentLoader.ButtonFont, button.Text, button.TextPosition, Color.White);
             }
 
             _spriteBatch.End();
             base.Draw(gameTime);
         }
 
+        /// <summary>
+        /// Returns the string with added alignment spaces.
+        /// Is not always 100% accurate due to different character sizes.
+        /// </summary>
+        /// <param name="font">Font of the text</param>
+        /// <param name="reference">Reference string to align the text to.</param>
+        /// <param name="toAlign">Text to align to the reference string.</param>
+        /// <returns>Returns the toAlign string aligned to the reference string with spaces.</returns>
         private static string AddAlignmentSpaces(SpriteFont font, string reference, string toAlign)
-            /*
-             * Returns the string with added alignment spaces.
-             * Is not always 100% accurate due to different character sizes
-             */
         {
-            return string.Concat(Enumerable.Repeat(" ",
-                (int) ((font.MeasureString(reference).X - font.MeasureString(toAlign).X)
+            return toAlign + string.Concat(Enumerable.Repeat(" ", 
+                (int) ((font.MeasureString(reference).X - font.MeasureString(toAlign).X) 
                        / font.MeasureString(" ").X) + 1).ToArray());
         }
 
@@ -563,39 +457,6 @@ namespace Poker
             const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
             return new string(Enumerable.Repeat(chars, length)
                 .Select(s => s[Random.Next(s.Length)]).ToArray());
-        }
-    }
-
-    public static class Logger
-    {
-        public static void WriteLine(string message, int level = 0)
-        {
-            var levelString = "";
-            switch (level)
-            {
-                case 0:
-                    levelString = "DEBUG: ";
-                    break;
-                case 1:
-                    levelString = "INFO: ";
-                    Console.ForegroundColor = ConsoleColor.Blue;
-                    break;
-                case 2:
-                    levelString = "WARNING: ";
-                    Console.ForegroundColor = ConsoleColor.Yellow;
-                    break;
-                case 3:
-                    levelString = "ERROR: ";
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    break;
-                case 4:
-                    levelString = "FATAL: ";
-                    Console.ForegroundColor = ConsoleColor.Red;
-                    break;
-            }
-
-            Console.WriteLine(String.Concat(DateTime.Now.ToString("HH:mm:ss"), " ", levelString, message));
-            Console.ResetColor();
         }
     }
 

@@ -85,7 +85,7 @@ public class GameServer
 
             // Add Cards to Table
             _table = new Table(0);
-            for (int j = 0; j < 5; j++)
+            for (var j = 0; j < 5; j++)
             {
                 _table.Cards.Add(Deck.Cards[_maxPlayers * UserCardsAmount + j]);
             }

@@ -8,8 +8,8 @@ namespace Poker
     [Serializable]
     public class Card
     {
-        public Category CardCategory { get; set; }
-        public Type CardType { get; set; }
+        public Category CardCategory;
+        public Type CardType;
 
         [JsonIgnore] [NonSerialized] public Texture2D Texture;
 
@@ -27,7 +27,7 @@ namespace Poker
 
         private static Color GetColor(Category category)
         {
-            Color color = category switch
+            var color = category switch
             {
                 Category.Clubs => Color.Black,
                 Category.Spades => Color.Black,
