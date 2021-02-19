@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations;
 using System.IO;
 using System.Linq;
 using System.Runtime.Serialization.Formatters.Binary;
@@ -8,29 +8,13 @@ using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
 using Microsoft.Xna.Framework.Input.Touch;
 using System.Threading;
-using Microsoft.Xna.Framework.Content;
 
 namespace Poker
 {
     public class PokerGame : Game
     {
-        // Cards
-        private List<Vector2> _userCardsPositions = new List<Vector2>();
-        private List<Vector2> _enemyCardsPositions = new List<Vector2>();
-        private List<Vector2> _tableCardsPositions = new List<Vector2>();
-        private int _tableCardsWidth;
-
-        // UI
-        private Resolution _resolution = new Resolution();
-
-        // Strings / Info
-        private string _userCash;
-        private string _userBet;
         private int _userBetAmount;
-        private string _enemyCash;
-        private string _enemyBet;
-        private int _enemyBetAmount;
-        private string _pot;
+        private int _opponentBetAmount;
 
         // Input
         private KeyboardState _previousKeyBoardState;
@@ -40,124 +24,111 @@ namespace Poker
 
         // General
         private GraphicsDeviceManager _graphics;
-
-        private User _user;
-        private User _enemy;
-        private Table _table;
         private GameServer _gameServer;
         private Client _client;
         private Thread ServerThread;
-        private Thread ConnThread;
+        private Thread ClientThread;
         private static Random Random = new Random();
-        private readonly string _clientKey = GetRandomString(16);
+        private readonly string _clientKey = GenerateRandomKey(16);
         private const string ServerPassword = "test1234";
-        private bool _host;
-        private SpriteBatch _spriteBatch;
+        private bool isHost;
+        public UI UserInterface;
+        public Resolution WindowResolution = new Resolution();
+        public Drawer GameDrawer;
+        private bool _firstRound = true;
 
-        public PokerGame(bool host)
+        public PokerGame(bool isHost)
         {
-            _host = host;
-            if (_host)
+            this.isHost = isHost;
+            if (isHost)
             {
                 _gameServer = new GameServer(key: ServerPassword);
                 ServerThread = new Thread(_gameServer.PollEvents);
             }
 
-            _client = new Client(_clientKey, ServerPassword);
-            ConnThread = new Thread(_client.PollEvents);
-
-            _user = new User(_clientKey);
-            _enemy = _client.Enemy;
+            _client = new Client(_clientKey, ServerPassword) {User = new User(_clientKey, isHost ? "HOST" : "CLIENT")};
+            ClientThread = new Thread(_client.PollEvents);
 
             _graphics = new GraphicsDeviceManager(this);
-            _resolution.Update(_graphics);
+            WindowResolution.Update(_graphics);
             TouchPanel.EnableMouseTouchPoint = true;
             _graphics.ApplyChanges();
-            Content.RootDirectory = "Content";
             IsMouseVisible = true;
-            UpdateEnemy();
+        }
+
+        private void StartServer()
+        {
+            ServerThread.Start();
+            _gameServer.CreateDeck(UserInterface.ContentLoader.CardSprites);
+            _gameServer.AddCardsToTable();
         }
 
         protected override void LoadContent()
         {
-            _spriteBatch = new SpriteBatch(GraphicsDevice);
+            UserInterface = new UI(WindowResolution, new ContentLoader(Content));
+            GameDrawer = new Drawer(UserInterface, new SpriteBatch(GraphicsDevice));
+            
+            UserInterface.ContentLoader.LoadTextures();
+            UserInterface.ContentLoader.SplitCardSprites();
+            UserInterface.ContentLoader.SplitChipSprites();
+            
+            UserInterface.CreateChipElements();
+            UserInterface.CreateButtonElements();
+            UserInterface.UpdateOpponentInfoElements(_client.Opponent.Name, 0, 0);
+            UserInterface.UpdateUserInfoElements(0, 0, 0);
+            
+            if (isHost) StartServer();
 
-            // Scaling texture sizes
-
-
-            // Chips and CardsDeck Initialization
-            if (_host)
-            {
-                ServerThread.Start();
-                _gameServer.CreateDeck(_cardTextures);
-            }
-
-            _client.Deck = new Deck(false, _cardTextures);
-            ConnThread.Start();
-
-            if (_host)
-            {
-                _gameServer.ProcessRound(true);
-            }
-
-
-
-
-            // Add User, Enemy and Table Cards positions
-            _userCardsPositions.Add(new Vector2(
-                _resolution.VirtualScreen.X / 2 - (float) _userCardsWidth / 2,
-                _resolution.VirtualScreen.Y - _cardHeight - _marginX));
-            _userCardsPositions.Add(new Vector2(
-                _resolution.VirtualScreen.X / 2 - (float) _userCardsWidth / 2 + _cardWidth + _marginX,
-                _resolution.VirtualScreen.Y - _cardHeight - _marginX));
-
-            _enemyCardsPositions.Add(new Vector2(
-                _resolution.VirtualScreen.X / 2 - (float) _userCardsWidth / 2,
-                _marginY));
-            _enemyCardsPositions.Add(new Vector2(
-                _resolution.VirtualScreen.X / 2 - (float) _userCardsWidth / 2 + _cardWidth + _marginX,
-                _marginY));
-
-            _tableCardsPositions = new List<Vector2>();
-            _tableCardsWidth = (int) (5 * _cardWidth + (5 - 1) * _marginX);
-            for (int i = 0; i < 5; i++)
-            {
-                _tableCardsPositions.Add(
-                    new Vector2(
-                        _resolution.VirtualScreen.X / 2 - (float) _tableCardsWidth / 2 +
-                        i * (_cardWidth + _marginX),
-                        _resolution.VirtualScreen.Y / 2 - (float) _cardHeight / 2));
-            }
+            _client.Deck = new Deck(UserInterface.ContentLoader.CardSprites);
+            ClientThread.Start();
+            _client.BroadcastClientUpdate();
+            Thread.Sleep(1000);
+            UserInterface.UpdateUserCardElements(_client.User.Cards);
         }
 
         protected override void Update(GameTime gameTime)
         {
-            // Get latest variables from server and update enemy with info
-            UpdateEnemy();
             BetButtonSwitcher();
-            _user = _client.User;
-            _enemy = _client.Enemy;
-            _table = _client.Table;
-            if (_enemy.Bets != null && _user.Bets.Count > 0)
+            
+            // Update User UI
+            if (_client.User.IsChangedByClient)
             {
-                if (_enemy.Bets.Sum() > _user.Bets.Sum())
-                {
-                    _user.HasBetted = false;
-                }
+                UserInterface.UpdateUserInfoElements(_client.User.Cash, _client.User.Bets.Sum(), _client.Table.Pot);
+                _client.BroadcastClientUpdate();
             }
 
-            if (_uiPositions.Count < 5 && _enemy.Name != null)
+            if (_client.User.IsChangedByServer)
             {
-                // Enemy UI Positions
-                // Cash/Bet Positions have the same MeasureString() for better alignment
-                _uiPositions.Add(new Vector2(
-                    _resolution.VirtualScreen.X - _font.MeasureString(_enemy.Name + "'S CASH: $" + _enemy.Cash).X -
-                    _marginX,
-                    _marginY));
-                _uiPositions.Add(new Vector2(
-                    _resolution.VirtualScreen.X - _font.MeasureString(_enemy.Name + "'S CASH: $" + _enemy.Cash).X -
-                    _marginX,
-                    _marginY + _font.LineSpacing));
+                UserInterface.UpdateUserInfoElements(_client.User.Cash, _client.User.Bets.Sum(), _client.Table.Pot);
+                UserInterface.UpdateUserCardElements(_client.User.Cards);
+                _client.User.IsChangedByServer = false;
+            }
+            
+            // Update Table UI
+            if (!_client.Opponent.Key.Equals("") && _client.Table.HasChanged)
+            {
+                UserInterface.UpdateTableCardElements(_client.Table.Cards);
+                _client.Table.HasChanged = false;
+            }
+            
+            // Update Opponent UI
+            if (!_client.Opponent.Key.Equals("") && (_client.Opponent.IsChangedByServer || _client.Opponent.IsChangedByClient))
+            {
+                UserInterface.UpdateOpponentCardElements(_client.Opponent.Cards);
+                UserInterface.UpdateOpponentInfoElements(_client.Opponent.Name, _client.Opponent.Cash, _client.Opponent.Bets.Sum());
+                if (isHost && _firstRound)
+                {
+                    _gameServer.ProcessGameLogic(true);
+                    _firstRound = false;
+                }
+            }
+            
+            if (_client.Opponent.Bets != null && _client.User.Bets.Count > 0)
+            {
+                if (_client.Opponent.Bets.Sum() > _client.User.Bets.Sum())
+                {
+                    _client.User.HasBetted = false;
+                }
             }
 
             _keyBoardState = Keyboard.GetState();
@@ -175,63 +146,63 @@ namespace Poker
             if (_mouseState.LeftButton == ButtonState.Pressed
                 && _previousMouseState.LeftButton == ButtonState.Released)
             {
-                Vector2 mousePos = GetMouseCoords();
-                if (!_user.HasBetted && _table.RealCardsAmount <= 5)
+                var mousePos = GetMouseCoords();
+                if (!_client.User.HasBetted && _client.User.Cash > 0)
                 {
-                    foreach (var chip in _chips.Where(chip => chip.Container.Contains(mousePos))
-                        .Where(chip => _user.Cash > 0))
+                    foreach (var chipElement in UserInterface.ChipElements
+                        .Where(chipElement => chipElement.Container.Contains(mousePos)))
                     {
-                        if (_user.HasAddedBet)
+                        if (_client.User.HasAddedBet)
                         {
-                            if (_user.Cash - _user.Bets[^1] >= chip.Value)
+                            if (_client.User.Cash - _client.User.Bets[^1] >= chipElement.Chip.Value)
                             {
                                 // User has 0 or more money left
-                                _user.Bets[^1] += chip.Value;
+                                _client.User.Bets[^1] += chipElement.Chip.Value;
                             }
                             else
                             {
                                 // User has less than the chips worth so add max money to bet
-                                _user.Bets[^1] += _user.Cash - _user.Bets[^1];
+                                _client.User.Bets[^1] += _client.User.Cash - _client.User.Bets[^1];
                             }
                         }
                         else
                         {
-                            _user.Bets.Add(_user.Cash >= chip.Value ? chip.Value : _user.Cash);
-                            _user.BetIsProcessed.Add(false);
-                            _user.HasAddedBet = true;
+                            _client.User.Bets.Add(_client.User.Cash >= chipElement.Chip.Value ? chipElement.Chip.Value : _client.User.Cash);
+                            _client.User.BetIsProcessed.Add(false);
+                            _client.User.HasAddedBet = true;
                         }
 
-                        _user.HasChanged = true;
+                        _client.User.IsChangedByClient = true;
                     }
                 }
 
-                for (int i = 0; i < _buttons.Count; i++)
+                for (var i = 0; i < UserInterface.ButtonElements.Count; i++)
                 {
-                    if (_buttons[i].Container.Contains(mousePos) && _table.RealCardsAmount <= 5)
+                    if (UserInterface.ButtonElements[i].Container.Contains(mousePos))
                     {
                         switch (i)
                         {
                             // Clear Bet
                             case 0:
-                                if (_user.HasAddedBet)
+                                if (_client.User.HasAddedBet)
                                 {
-                                    _user.Bets.Remove(_user.Bets[^1]);
-                                    _user.HasAddedBet = false;
-                                    _user.BetIsProcessed.Remove(_user.BetIsProcessed[^1]);
+                                    _client.User.Bets.Remove(_client.User.Bets[^1]);
+                                    _client.User.HasAddedBet = false;
+                                    _client.User.BetIsProcessed.Remove(_client.User.BetIsProcessed[^1]);
                                 }
 
-                                _user.HasChanged = true;
+                                _client.User.IsChangedByClient = true;
                                 break;
 
                             // Confirm Bet
                             case 1:
-                                if (_user.HasAddedBet)
+                                if (_client.User.HasAddedBet)
                                 {
-                                    if (!(_enemy.HasBetted && _user.Bets.Sum() < _enemy.Bets?.Sum()))
+                                    if (!(_client.Opponent.HasBetted && _client.User.Bets.Sum() < _client.Opponent.Bets?.Sum()))
                                     {
-                                        _user.HasBetted = true;
-                                        _user.HasAddedBet = false;
-                                        _user.HasChanged = true;
+                                        _client.User.HasBetted = true;
+                                        _client.User.HasAddedBet = false;
+                                        _client.User.IsChangedByClient = true;
                                     }
                                 }
 
@@ -239,36 +210,34 @@ namespace Poker
 
                             // Fold
                             case 2:
-                                _user.HasFolded = true;
-                                _user.HasChanged = true;
+                                _client.User.HasFolded = true;
+                                _client.User.IsChangedByClient = true;
                                 break;
 
                             // Call
                             case 3:
-                                if (!_user.HasBetted && _enemy.HasBetted && _enemy.Bets != null)
+                                if (!_client.User.HasBetted && _client.Opponent.HasBetted && _client.Opponent.Bets != null)
                                 {
-                                    if (_user.HasAddedBet)
+                                    if (_client.User.HasAddedBet)
                                     {
-                                        _user.Bets[^1] = Math.Min(_enemy.Bets.Sum() - _user.Bets.Sum() + _user.Bets[^1],
-                                            _user.Cash);
+                                        _client.User.Bets[^1] = Math.Min(_client.Opponent.Bets.Sum() - _client.User.Bets.Sum() + _client.User.Bets[^1],
+                                            _client.User.Cash);
                                     }
                                     else
                                     {
-                                        _user.Bets.Add(Math.Min(_enemy.Bets.Sum() - _user.Bets.Sum(), _user.Cash));
-                                        _user.BetIsProcessed.Add(false);
+                                        _client.User.Bets.Add(Math.Min(_client.Opponent.Bets.Sum() - _client.User.Bets.Sum(), _client.User.Cash));
+                                        _client.User.BetIsProcessed.Add(false);
                                     }
 
-                                    _user.HasAddedBet = false;
-                                    _user.HasBetted = true;
-                                    _user.HasChanged = true;
+                                    _client.User.HasAddedBet = false;
+                                    _client.User.HasBetted = true;
+                                    _client.User.IsChangedByClient = true;
                                 }
-
                                 break;
                         }
                     }
                 }
             }
-
             _previousMouseState = _mouseState;
             _previousKeyBoardState = _keyBoardState;
             base.Update(gameTime);
@@ -276,196 +245,116 @@ namespace Poker
 
         protected override void Draw(GameTime gameTime)
         {
-            _spriteBatch.Begin();
-            _spriteBatch.Draw(_backgroundImage, new Rectangle(0, 0, 800, 480), Color.White);
-            _spriteBatch.End();
-
-            // Draw cards
-            _spriteBatch.Begin(
+            GameDrawer.DrawBackground();
+            
+            GameDrawer.SpriteBatch.Begin(
                 SpriteSortMode.Immediate,
                 null,
                 null,
                 null,
                 null,
                 null,
-                _resolution.Scale);
-
-            for (int i = 0; i < UserCardsAmount; i++)
+                WindowResolution.Scale);
+            
+            // Draw Cards
+            if (UserInterface.UserCardElements?.Count == UI.UserCardsAmount)
             {
-                if (_enemy.Cards.Count == UserCardsAmount)
+                foreach (var userCardElement in UserInterface.UserCardElements)
                 {
-                    // Draw Enemy Cards
-                    _spriteBatch.Draw(
-                        _enemy.Cards[i].Texture,
-                        _enemyCardsPositions[i],
-                        null,
-                        Color.White,
-                        0f,
-                        new Vector2(0, 0),
-                        new Vector2(_scaleX, _scaleY),
-                        SpriteEffects.None,
-                        0f
-                    );
+                    GameDrawer.DrawCardElement(userCardElement);
                 }
-
-                if (_user.Cards.Count == UserCardsAmount)
+            }
+            
+            if (UserInterface.OpponentCardElements?.Count == UI.UserCardsAmount)
+            {
+                foreach (var opponentCardElement in UserInterface.OpponentCardElements)
                 {
-                    // Draw User Cards
-                    _spriteBatch.Draw(
-                        _user.Cards[i].Texture,
-                        _userCardsPositions[i],
-                        null,
-                        Color.White,
-                        0f,
-                        new Vector2(0, 0),
-                        new Vector2(_scaleX, _scaleY),
-                        SpriteEffects.None,
-                        0f
-                    );
+                    GameDrawer.DrawCardElement(opponentCardElement);
                 }
             }
 
-            // Draw Table Cards
-            if (_table.Cards != null)
+            if (UserInterface.TableCardElements != null)
             {
-                for (int i = 0; i < _table.Cards.Count; i++)
+                foreach (var tableCardElement in UserInterface.TableCardElements)
                 {
-                    _spriteBatch.Draw(
-                        _table.Cards[i].Texture,
-                        _tableCardsPositions[i],
-                        null,
-                        Color.White,
-                        0f,
-                        new Vector2(0, 0),
-                        new Vector2(_scaleX, _scaleY),
-                        SpriteEffects.None,
-                        0f
-                    );
+                    GameDrawer.DrawCardElement(tableCardElement);
                 }
             }
 
             // Draw Chips
-            if (ChipsAmount > 0)
+            foreach (var chipElement in UserInterface.ChipElements)
             {
-                foreach (var chip in _chips)
-                {
-                    _spriteBatch.Draw(
-                        chip.Texture,
-                        chip.Position,
-                        null,
-                        Color.White,
-                        0f,
-                        new Vector2(0, 0),
-                        new Vector2(_scaleX * ChipScale, _scaleY * ChipScale),
-                        SpriteEffects.None,
-                        0f
-                    );
-                }
+                GameDrawer.DrawChipElement(chipElement);
             }
 
-            // Draw Info and Options
-            // User/Pot Strings
-            _userBetAmount = _user.HasAddedBet ? _user.Bets[^1] : 0;
-            _userCash = "CASH: $" + _user.Cash;
-            _userBet = AddAlignmentSpaces(_contentLoader.DefaultFont, "CASH:", "BET:") + "$" + _userBetAmount;
-            _pot = AddAlignmentSpaces(_contentLoader.DefaultFont, "CASH:", "POT:") + "$" + _table.Pot;
-            _spriteBatch.DrawString(_contentLoader.DefaultFont, _userCash, _uiPositions[0], Color.White);
-            _spriteBatch.DrawString(_contentLoader.DefaultFont, _userBet, _uiPositions[1], Color.White);
-            _spriteBatch.DrawString(_contentLoader.DefaultFont, _pot, _uiPositions[2], Color.White);
-
-            // Enemy Strings
-            _enemyBetAmount = _enemy.HasAddedBet || _enemy.HasBetted ? _enemy.Bets.Count > 0 ? _enemy.Bets[^1] : 0 : 0;
-            _enemyCash = _enemy.Name + "'S CASH: $" + _enemy.Cash;
-            _enemyBet = _enemy.Name + "'S BET:" + AddAlignmentSpaces(_font, "CASH:", "BET:") + "$" +
-                        _enemyBetAmount;
-            if (_uiPositions.Count > 3)
+            // Draw Info
+            foreach (var userInfoElement in UserInterface.UserInfoElements)
             {
-                _spriteBatch.DrawString(_contentLoader.DefaultFont, _enemyCash, _uiPositions[3], Color.White);
-                _spriteBatch.DrawString(_contentLoader.DefaultFont, _enemyBet, _uiPositions[4], Color.White);
+                GameDrawer.DrawInfoElement(userInfoElement);
+            }
+            
+            foreach (var opponentInfoElement in UserInterface.OpponentInfoElements)
+            {
+                GameDrawer.DrawInfoElement(opponentInfoElement);
             }
 
-            // Buttons
-            foreach (var button in _buttons)
+            // Draw Buttons
+            foreach (var buttonElement in UserInterface.ButtonElements)
             {
-                _spriteBatch.Draw(
-                    _contentLoader.ButtonTexture,
-                    button.Position,
-                    null,
-                    Color.White,
-                    0f,
-                    new Vector2(0, 0),
-                    new Vector2(UI.ButtonScale, UI.ButtonScale),
-                    SpriteEffects.None,
-                    0f
-                );
-                _spriteBatch.DrawString(_contentLoader.ButtonFont, button.Text, button.TextPosition, Color.White);
+                GameDrawer.DrawButtonElement(buttonElement);
             }
 
-            _spriteBatch.End();
+            GameDrawer.SpriteBatch.End();
             base.Draw(gameTime);
         }
 
         /// <summary>
-        /// Returns the string with added alignment spaces.
-        /// Is not always 100% accurate due to different character sizes.
+        /// Changes the Bet button element to Raise or vice versa when necessary
         /// </summary>
-        /// <param name="font">Font of the text</param>
-        /// <param name="reference">Reference string to align the text to.</param>
-        /// <param name="toAlign">Text to align to the reference string.</param>
-        /// <returns>Returns the toAlign string aligned to the reference string with spaces.</returns>
-        private static string AddAlignmentSpaces(SpriteFont font, string reference, string toAlign)
-        {
-            return toAlign + string.Concat(Enumerable.Repeat(" ", 
-                (int) ((font.MeasureString(reference).X - font.MeasureString(toAlign).X) 
-                       / font.MeasureString(" ").X) + 1).ToArray());
-        }
-
-        private void UpdateEnemy()
-        {
-            if (!_user.HasChanged) return;
-            // Tell server User has changed and broadcast it to enemy
-            _client.Broadcast(new Message(_clientKey, "EnemyUpdate", _user));
-            _user.HasChanged = false;
-        }
-
         private void BetButtonSwitcher()
         {
-            if (_enemy.Bets.Count > 0 && _user.Bets.Count > 0 && _enemy.Bets.Sum() < _user.Bets.Sum())
-            {
-                // Change BET to RAISE Button
-                _betButton.Text = "RAISE";
-                _betButton.TextPosition = _betButton.CalculateTextPosition();
-            }
+            if (_client.Opponent.Bets.Count > 0 && _client.User.Bets.Count > 0 && _client.Opponent.Bets.Sum() < _client.User.Bets.Sum())
+                UserInterface.ButtonElements[1].TextElement.Text = "RAISE";
             else
-            {
-                _betButton.Text = "BET";
-                _betButton.TextPosition = _betButton.CalculateTextPosition();
-            }
+                UserInterface.ButtonElements[1].TextElement.Text = "BET";
+            UserInterface.ButtonElements[1].TextElement.Position = UserInterface.ButtonElements[1].CalculateTextPosition();
         }
 
+        /// <summary>
+        /// Gets the coordinates of the current mouse position
+        /// </summary>
+        /// <returns>A scaled Vector2 with the mouse coordinates</returns>
         private Vector2 GetMouseCoords()
         {
             float x = Mouse.GetState().X;
             float y = Mouse.GetState().Y;
 
-            var sceneCoords = new Vector2(x / _resolution.ScreenScale.X, y / _resolution.ScreenScale.Y);
+            var sceneCoords = new Vector2(x / WindowResolution.ScreenScale.X, y / WindowResolution.ScreenScale.Y);
             return sceneCoords;
         }
 
-        public static string GetRandomString(int length)
+        /// <summary>
+        /// Generates a random string as client/server key.
+        /// </summary>
+        /// <param name="length"></param>
+        /// <returns>A random string with the specified length</returns>
+        public static string GenerateRandomKey(int length)
         {
             const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
             return new string(Enumerable.Repeat(chars, length)
                 .Select(s => s[Random.Next(s.Length)]).ToArray());
         }
     }
-
+    
+    /// <summary>
+    /// Deep clones an object.
+    /// </summary>
     public static class ExtensionMethods
     {
         public static T DeepClone<T>(this T a)
         {
-            using MemoryStream stream = new MemoryStream();
-            BinaryFormatter formatter = new BinaryFormatter();
+            using var stream = new MemoryStream();
+            var formatter = new BinaryFormatter();
             formatter.Serialize(stream, a);
             stream.Position = 0;
             return (T) formatter.Deserialize(stream);

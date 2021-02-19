@@ -8,7 +8,7 @@ namespace Poker
     {
         
         [STAThread]
-        static void Main(string[] args)
+        private static void Main(string[] args)
         {
             using var game = new PokerGame(args[0] == "true");
             game.Run();

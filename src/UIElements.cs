@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 
@@ -6,26 +7,27 @@ namespace Poker
 
     public class ButtonElement : UIElement
     {
-        public Vector2 TextPosition;
+        public readonly InfoElement TextElement;
         public ButtonElement(Texture2D texture, Vector2 position, string text, SpriteFont font)
         {
             Texture = texture;
             Scale = UI.ButtonScale;
             Position = position;
-            Text = text;
-            Font = font;
+            TextElement = new InfoElement(text, CalculateTextPosition(text, font), font);
             Container = CreateContainer();
-            TextPosition = CalculateTextPosition();
         }
         /// <summary>
         /// Calculates the position of the text inside the button.
         /// </summary>
         /// <returns>The position of the text inside the button.</returns>
-        public Vector2 CalculateTextPosition()
+        public Vector2 CalculateTextPosition(string text=null, SpriteFont font=null)
         {
+            text ??= TextElement.Text;
+            font ??= TextElement.Font;
+            
             return new Vector2(
-                Position.X + (Texture.Width * Scale / 2 - Font.MeasureString(Text).X / 2),
-                Position.Y + (Texture.Height * Scale / 2 - (float) Font.LineSpacing / 2));
+                Position.X + (Texture.Width * Scale / 2 - font.MeasureString(text).X / 2),
+                Position.Y + (Texture.Height * Scale / 2 - (float) font.LineSpacing / 2));
         }
     }
     
@@ -66,17 +68,16 @@ namespace Poker
             Position = position;
             Font = font;
             Scale = 1.0f;
-            Container = CreateContainer();
         }
     }
     
     public class UIElement
     {
-        protected Texture2D Texture { get; set; }
+        public Texture2D Texture { get; set; }
         public Vector2 Position { get; set; }
         public Rectangle Container { get; set; }
-        protected float Scale { get; set; }
-        protected SpriteFont Font { get; set; }
+        public float Scale { get; set; }
+        public SpriteFont Font { get; set; }
         public string Text { get; set; }
 
         /// <summary>

@@ -22,6 +22,7 @@ namespace Poker
         public ContentLoader(ContentManager contentManager)
         {
             _contentManager = contentManager;
+            _contentManager.RootDirectory = "Content";
         }
         
         /// <summary>

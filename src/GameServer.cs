@@ -9,100 +9,119 @@ using Newtonsoft.Json;
 
 namespace Poker
 {
-public class GameServer
+    public class GameServer
     {
         private EventBasedNetListener _listener = new EventBasedNetListener();
         private NetDataWriter _writer;
         private NetManager _server;
         private string _password;
-        private string _key = PokerGame.GetRandomString(16);
-        private int _maxPlayers;
-        private Table _table = new Table();
-        private Table _broadCastTable = new Table();
-        private List<User> _users;
-        public Deck Deck;
-        public int UserCardsAmount;
-        private int _tableCardsAmount;
-        private User _newUser;
+        private string _key = PokerGame.GenerateRandomKey(16);
 
-        public GameServer(int port = 9050, string key = "", int maxPlayers = 2)
+        private Table _table = new Table();
+        private List<User> _users;
+        private Deck _deck;
+        private User _newUser;
+        private GameServerLogic GameLogic;
+        private const int DefaultCash = 1000;
+
+        // If you change these, things will break (so don't)
+        private const int MaxPlayers = 2;
+        private const int UserCardsAmount = 2;
+
+        public GameServer(int port = 9050, string key = "")
         {
             try
             {
                 _writer = new NetDataWriter();
                 _server = new NetManager(_listener);
                 _password = key;
-                _maxPlayers = maxPlayers;
-                _users = new List<User>(_maxPlayers);
+                _users = new List<User>(MaxPlayers);
                 _server.Start(port);
+                AddEventListeners();
+                GameLogic = new GameServerLogic(ref _table, ref _deck, ref _users);
             }
             catch (Exception)
             {
-                Logger.WriteLine("Exception occurred, server might already be running on the same port.", 3);
+                Logger.Fatal("SERVER: Exception occurred during server startup, " + 
+                             "server might already be running on the same port.");
+                throw new Exception("SERVER: Exception occurred during server startup, " +
+                                    "server might already be running on the same port.");
             }
+        }
 
+        private void AddEventListeners()
+        {
+            // Request to connect to server
             _listener.ConnectionRequestEvent += request =>
             {
-                if (_server.GetPeersCount(ConnectionState.Connected) < _maxPlayers)
+                if (_server.GetPeersCount(ConnectionState.Connected) < MaxPlayers)
                     request.AcceptIfKey(_password);
                 else
                     request.Reject();
             };
 
+            // Approved new connection to server
             _listener.PeerConnectedEvent += peer =>
             {
-                Logger.WriteLine($"New Connection: {peer.EndPoint}");
+                Logger.Info($"SERVER: New Connection: {peer.EndPoint}");
                 _writer.Put(new Message(_key, "ConnectionSuccessful").Json());
                 peer.Send(_writer, DeliveryMethod.ReliableOrdered);
                 _writer.Reset();
-                Logger.WriteLine($"Connected Clients: {_server.GetPeersCount(ConnectionState.Connected)}");
-                if (_users.Count >= 1)
-                {
-                    ProcessRound(true);
-                }
+                Logger.Info($"SERVER: Connected Clients: {_server.GetPeersCount(ConnectionState.Connected)}");
             };
 
+            // Receive broadcast from client
             _listener.NetworkReceiveEvent += (fromPeer, dataReader, deliveryMethod) =>
             {
-                var message = dataReader.GetString();
-                Broadcast(JsonConvert.DeserializeObject<Message>(message), fromPeer.Id);
+                // Rebroadcast so that other client can see.
+                var message = JsonConvert.DeserializeObject<Message>(dataReader.GetString());
+                Logger.Info(string.Concat("SERVER (78): Received ", message.Type, " from: ", fromPeer.Id));
+                Broadcast(message, fromPeer.Id);
                 dataReader.Recycle();
             };
         }
 
-        public void CreateDeck(Texture2D[] textures, bool addJokers = false, bool shuffle = true)
+        /// <summary>
+        /// Creates the server cards deck.
+        /// </summary>
+        /// <param name="textures">Card textures</param>
+        /// <param name="addJokers">Whether to add jokers to the deck or not</param>
+        /// <param name="shuffle">Shuffle the deck?</param>
+        public void CreateDeck(List<Texture2D> textures, bool addJokers = false, bool shuffle = true)
         {
-            Deck = new Deck(addJokers, textures);
-            ResetDeck(shuffle);
+            _deck = new Deck(textures, addJokers);
+            if (shuffle) _deck.Shuffle();
         }
 
-        private void ResetDeck(bool shuffle = true)
+        /// <summary>
+        /// Adds 5 cards from the deck to the table.
+        /// </summary>
+        public void AddCardsToTable()
         {
-            if (shuffle)
-            {
-                Deck.Shuffle();
-            }
-
-            // Add Cards to Table
-            _table = new Table(0);
             for (var j = 0; j < 5; j++)
             {
-                _table.Cards.Add(Deck.Cards[_maxPlayers * UserCardsAmount + j]);
+                _table.Cards.Add(_deck.Cards[MaxPlayers * UserCardsAmount + j]);
             }
         }
 
+        /// <summary>
+        /// Polls updates from all connections.
+        /// </summary>
         public void PollEvents()
         {
             while (true)
             {
                 _server.PollEvents();
-                ProcessRound();
+                ProcessGameLogic();
                 Thread.Sleep(15);
             }
 
             // ReSharper disable once FunctionNeverReturns
         }
 
+        /// <summary>
+        /// Stops the server and closes all connections.
+        /// </summary>
         public void Stop()
         {
             _server.Stop();
@@ -110,39 +129,37 @@ public class GameServer
 
         private void Broadcast(Message message, int fromPeerId = -1)
         {
-            if (Deck == null) return;
-            if (!message.Type.Equals("UserUpdate"))
+            if (_deck == null) return;
+            if (!message.Type.Equals("ServerClientUpdate"))
             {
                 try
                 {
                     // Deserialize broadcasted User and check if it already exists in _users, then replace the saved User
                     // with the broadcasted user but keep the Cards/Cash. This way we always have the latest Users cached.
                     _newUser = JsonConvert.DeserializeObject<User>(message.Object);
+                    _newUser.IsChangedByServer = true;
+                    _newUser.IsChangedByClient = false;
+
                     if (_users.Any(user => user.Key.Equals(_newUser.Key)))
                     {
                         var user = _users.First(u => u.Key.Equals(_newUser.Key));
                         _newUser.Cards = user.Cards;
                         _newUser.Cash = user.Cash;
-                        _newUser.HasLost = user.HasLost;
+                        _newUser.HasLostRound = user.HasLostRound;
                         _newUser.HasLostGame = user.HasLostGame;
                         _users[_users.FindIndex(u => u.Key == user.Key)] = _newUser.DeepClone();
                     }
                     else
                     {
-                        _newUser.Cards = new List<Card>();
+                        // New user joined
+                        _newUser = new User(_newUser.Key, _newUser.Name, DefaultCash) {Cards = new List<Card>()};
                         for (var j = 0; j < UserCardsAmount; j++)
-                        {
-                            _newUser.Cards.Add(Deck.Cards[_users.Count * UserCardsAmount + j]);
-                        }
+                            _newUser.Cards.Add(_deck.Cards[_users.Count * UserCardsAmount + j]);
 
                         _users.Add(_newUser.DeepClone());
-                        Broadcast(new Message(_key, "UserUpdate", _users[^1]),
-                            _users.Count > 1 ? _server.ConnectedPeerList.First(peer => peer.Id != fromPeerId).Id : -1);
-                    }
-
-                    for (int i = 0; i < _newUser.Cards.Count; i++)
-                    {
-                        _newUser.Cards[i] = Deck.Reverse;
+                        message = new Message(_key, "ServerClientUpdate");
+                        if (_users.Count == 2)
+                            BroadCastServerOpponentUpdates();
                     }
 
                     message.Object = JsonConvert.SerializeObject(_newUser);
@@ -151,164 +168,88 @@ public class GameServer
                 catch (Exception e)
                 {
                     // Message was not a User
-                    Logger.WriteLine(e.ToString());
+                    Logger.Error(e.ToString());
                 }
             }
-
-            _writer.Put(message.Json());
-            if (fromPeerId >= 0)
+            
+            if (_server.ConnectedPeerList != null)
             {
-                _server.SendToAll(_writer, DeliveryMethod.ReliableOrdered, _server.GetPeerById(fromPeerId));
-            }
-            else
-            {
-                _server.SendToAll(_writer, DeliveryMethod.ReliableOrdered);
+                message.Type = "ServerClientUpdate";
+                _writer.Put(message.Json());
+                Logger.Info(string.Concat("SERVER (182): Broadcasting ", message.Type, " to: ", fromPeerId));
+                
+                _server.SendToAll(_writer, DeliveryMethod.ReliableOrdered,
+                    _users.Count == 2 ? _server.ConnectedPeerList.First(peer => peer.Id != fromPeerId) : null);
             }
 
             _writer.Reset();
         }
 
-        private void BroadCastUsers()
+        private void BroadCastServerClientUpdates()
         {
-            for (int i = 0; i < _users.Count; i++)
+            Logger.Info($"SERVER: Broadcasting ServerClientUpdates to {_users.Count} user(s).");
+            for (var i = 0; i < _users.Count; i++)
             {
-                var message = new Message(_key, "UserUpdate", _users[i]);
+                _users[i].IsChangedByServer = true;
+                _users[i].IsChangedByClient = false;
+                var message = new Message(_key, "ServerClientUpdate", _users[i]);
                 _writer.Put(message.Json());
-                _server.SendToAll(_writer, DeliveryMethod.ReliableOrdered,
-                    _users.Count > 1
-                        ? i == 0 ? _server.FirstPeer :
-                        _server.ConnectedPeerList.First(peer => peer != _server.FirstPeer)
-                        : null);
+                _server.SendToAll(_writer, DeliveryMethod.ReliableOrdered, i == 0 ? _server.GetPeerById(1) : _server.GetPeerById(0));
                 _writer.Reset();
             }
         }
 
-        private void BroadCastTable()
+        private void BroadCastServerOpponentUpdates(bool makeCardsReverse = true)
         {
-            _table.RealCardsAmount = _tableCardsAmount;
-            _broadCastTable = _table.DeepClone();
-            for (int i = 0; i < 5 - _tableCardsAmount; i++)
+            Logger.Info($"SERVER: Broadcasting ServerOpponentUpdates to {_users.Count} user(s).");
+            for (var i = 0; i < _users.Count; i++)
             {
-                _broadCastTable.Cards[4 - i] = Deck.Reverse;
+                _users[i].IsChangedByServer = true;
+                _users[i].IsChangedByClient = false;
+                if (makeCardsReverse)
+                {
+                    _newUser = _users[i].DeepClone();
+                    for (var j = 0; j < _newUser.Cards.Count; j++)
+                        _newUser.Cards[j] = _deck.Reverse;
+                }
+
+                var message = new Message(_key, "ServerOpponentUpdate", makeCardsReverse ? _newUser : _users[i]);
+                _writer.Put(message.Json());
+                _server.SendToAll(_writer, DeliveryMethod.ReliableOrdered, _server.GetPeerById(i));
+                _writer.Reset();
+            }
+        }
+
+        private void BroadCastTableUpdate()
+        {
+            Logger.Info($"SERVER: Broadcasting TableUpdate to {_users.Count} user(s).");
+            _table.HasChanged = true;
+            var broadCastTable = _table.DeepClone();
+            for (var i = 0; i < 5 - GameLogic.ActiveTableCardsAmount; i++)
+            {
+                broadCastTable.Cards[4 - i] = _deck.Reverse;
             }
 
-            var message = new Message(_key, "TableUpdate", _broadCastTable);
+            var message = new Message(_key, "ServerTableUpdate", broadCastTable);
             _writer.Put(message.Json());
             _server.SendToAll(_writer, DeliveryMethod.ReliableOrdered);
             _writer.Reset();
         }
 
-        public void ProcessRound(bool first = false)
+        public void ProcessGameLogic(bool first = false)
         {
-            var usersChanged = false;
-            var tableChanged = false;
-
-            // Process Bets
-            foreach (var user in _users)
-            {
-                if (user.HasBetted && !user.BetIsProcessed[^1])
-                {
-                    user.HasAddedBet = false;
-                    _table.Pot += user.Bets[^1];
-                    user.Cash -= user.Bets[^1];
-                    user.BetIsProcessed[^1] = true;
-
-                    usersChanged = true;
-                    tableChanged = true;
-                }
-
-                if (!user.HasFolded) continue;
-                
-                user.HasLost = true;
-                if (user.Cash <= 0)
-                {
-                    user.HasLostGame = true;
-                }
-                else
-                {
-                    foreach (var u in _users.Where(u => u.Key != user.Key))
-                    {
-                        u.Cash += _table.Pot / _users.Count(us => us.Key != user.Key);
-                    }
-
-                    ResetRound();
-                }
-
-                usersChanged = true;
-                tableChanged = true;
-            }
+            GameLogic.ProcessRound();
             
-            // Process End of Bets (Table cards, reset bets)
-            if (_users.Count >= 2 && _users.All(user => user.HasBetted)
-                                  && _users.All(user => user.BetIsProcessed.All(bet => bet))
-                                  && _users[0].Bets.Sum() == _users[1].Bets.Sum())
-            {
-                if (_tableCardsAmount < 6)
-                {
-                    _tableCardsAmount = _tableCardsAmount == 0 ? 3 : ++_tableCardsAmount;
-                    tableChanged = true;
-                }
-
-                foreach (var user in _users)
-                {
-                    user.HasBetted = false;
-                    user.BetIsProcessed = new List<bool>();
-                    user.Bets = new List<int>();
-                }
-            }
-            
-            // End of Game
-            if (_users.Any(user => user.HasLostGame))
-            {
-                ResetGame();
-                BroadCastTable();
-                BroadCastUsers();
-
-                tableChanged = false;
-                usersChanged = false;
-            }
-
             // Broadcast Table if changed
-            if ((tableChanged || first) && Deck != null)
+            if ((GameLogic.TableHasChanged || first) && _deck != null)
             {
-                BroadCastTable();
+                BroadCastTableUpdate();
             }
 
-            // Broadcast UserUpdates if changed
-            if (usersChanged || first)
-            {
-                BroadCastUsers();
-            }
-        }
-
-        private void ResetRound()
-        {
-            _tableCardsAmount = 0;
-            ResetDeck();
-            foreach (var user in _users)
-            {
-                user.Bets = new List<int>();
-                user.HasAddedBet = false;
-                user.HasBetted = false;
-                user.HasFolded = false;
-                user.HasLost = false;
-                user.HasLostGame = false;
-                user.HasChanged = true;
-                user.Cards = new List<Card>();
-            }
-
-            for (var i = 0; i < _users.Count; i++)
-            {
-                for (var j = 0; j < UserCardsAmount; j++)
-                {
-                    _users[i].Cards.Add(Deck.Cards[i * UserCardsAmount + j]);
-                }
-            }
-        }
-
-        private void ResetGame()
-        {
-            ResetRound();
+            // Broadcast Client/Opponent Updates if changed
+            if (!GameLogic.UsersHaveChanged && !first) return;
+            BroadCastServerClientUpdates();
+            BroadCastServerOpponentUpdates(!GameLogic.RoundEnded);
         }
     }
 }

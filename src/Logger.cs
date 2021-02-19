@@ -33,5 +33,30 @@ namespace Poker
             Console.WriteLine(String.Concat(DateTime.Now.ToString("HH:mm:ss"), " ", levelString, message));
             Console.ResetColor();
         }
+        
+        public static void Debug(string message)
+        {
+            WriteLine(message);
+        }
+        
+        public static void Info(string message)
+        {
+            WriteLine(message, 1);
+        }
+        
+        public static void Warning(string message)
+        {
+            WriteLine(message, 2);
+        }
+        
+        public static void Error(string message)
+        {
+            WriteLine(message, 3);
+        }
+        
+        public static void Fatal(string message)
+        {
+            WriteLine(message, 4);
+        }
     }
 }
