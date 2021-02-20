@@ -11,7 +11,7 @@ namespace Poker
         public ButtonElement(Texture2D texture, Vector2 position, string text, SpriteFont font)
         {
             Texture = texture;
-            Scale = UI.ButtonScale;
+            Scale = GameUI.ButtonScale;
             Position = position;
             TextElement = new InfoElement(text, CalculateTextPosition(text, font), font);
             Container = CreateContainer();
@@ -37,7 +37,7 @@ namespace Poker
         public CardElement(Card card, Vector2 position)
         {
             Card = card;
-            Scale = UI.CardScale;
+            Scale = GameUI.CardScale;
             Position = position;
             Container = CreateContainer();
         }
@@ -54,7 +54,7 @@ namespace Poker
         public ChipElement(Chip chip, Vector2 position, Rectangle container)
         {
             Chip = chip;
-            Scale = UI.ChipScale;
+            Scale = GameUI.ChipScale;
             Position = position;
             Container = container;
         }

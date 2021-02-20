@@ -38,7 +38,7 @@ namespace Poker
                 _users = new List<User>(MaxPlayers);
                 _server.Start(port);
                 AddEventListeners();
-                GameLogic = new GameServerLogic(ref _table, ref _deck, ref _users);
+                GameLogic = new GameServerLogic(ref _table, ref _deck, ref _users, DefaultCash);
             }
             catch (Exception)
             {

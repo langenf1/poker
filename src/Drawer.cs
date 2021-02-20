@@ -6,18 +6,18 @@ namespace Poker
     public class Drawer
     {
         public SpriteBatch SpriteBatch;
-        private UI _ui;
+        private GameUI _gameUI;
 
-        public Drawer(UI ui, SpriteBatch spriteBatch)
+        public Drawer(GameUI gameUI, SpriteBatch spriteBatch)
         {
-            _ui = ui;
+            _gameUI = gameUI;
             SpriteBatch = spriteBatch;
         }
 
         public void DrawBackground()
         {
             SpriteBatch.Begin();
-            SpriteBatch.Draw(_ui.ContentLoader.BackgroundImage, new Rectangle(0, 0, 800, 480), Color.White);
+            SpriteBatch.Draw(_gameUI.ContentLoader.BackgroundImage, new Rectangle(0, 0, 800, 480), Color.White);
             SpriteBatch.End();
         }
 
@@ -30,7 +30,7 @@ namespace Poker
                 Color.White,
                 0f,
                 new Vector2(0, 0),
-                new Vector2(_ui.ScaleX, _ui.ScaleY),
+                new Vector2(_gameUI.ScaleX, _gameUI.ScaleY),
                 SpriteEffects.None,
                 0f
             );
@@ -45,7 +45,7 @@ namespace Poker
                 Color.White,
                 0f,
                 new Vector2(0, 0),
-                new Vector2(_ui.ScaleX * UI.ChipScale, _ui.ScaleY * UI.ChipScale),
+                new Vector2(_gameUI.ScaleX * GameUI.ChipScale, _gameUI.ScaleY * GameUI.ChipScale),
                 SpriteEffects.None,
                 0f
             );
@@ -54,13 +54,13 @@ namespace Poker
         public void DrawButtonElement(ButtonElement element)
         {
             SpriteBatch.Draw(
-                _ui.ContentLoader.ButtonTexture,
+                _gameUI.ContentLoader.ButtonTexture,
                 element.Position,
                 null,
                 Color.White,
                 0f,
                 new Vector2(0, 0),
-                new Vector2(UI.ButtonScale, UI.ButtonScale),
+                new Vector2(GameUI.ButtonScale, GameUI.ButtonScale),
                 SpriteEffects.None,
                 0f
             );

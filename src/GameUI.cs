@@ -5,7 +5,7 @@ using Microsoft.Xna.Framework.Graphics;
 
 namespace Poker
 {
-    public class UI
+    public class GameUI
     {
         private readonly Resolution _resolution;
 
@@ -48,7 +48,7 @@ namespace Poker
         public const int UserCardsAmount = 2;
         public const int TableCardsAmount = 5;
 
-        public UI(Resolution resolution, ContentLoader contentLoader)
+        public GameUI(Resolution resolution, ContentLoader contentLoader)
         {
             _resolution = resolution;
             ContentLoader = contentLoader;
@@ -71,9 +71,7 @@ namespace Poker
             ChipHeight = InitialChipWidth * ChipScale;
             ChipsAmount = ChipValues.Count - StartAtChipIndex;
             CumulativeChipHeight = ChipsAmount * ChipHeight + (ChipsAmount - 1) * ElementMarginY;
-
-            InitialCardHeight = (int) (InitialCardHeight * ScaleY);
-            InitialCardWidth = (int) (InitialCardWidth * ScaleY);
+            
             CardHeight = InitialCardHeight * ScaleY;
             CardWidth = InitialCardWidth * ScaleX;
             UserCardsWidth = UserCardsAmount * CardWidth + (UserCardsAmount - 1) * ElementMarginX;

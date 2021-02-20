@@ -32,7 +32,7 @@ namespace Poker
         private readonly string _clientKey = GenerateRandomKey(16);
         private const string ServerPassword = "test1234";
         private bool isHost;
-        public UI UserInterface;
+        public GameUI UserInterface;
         public Resolution WindowResolution = new Resolution();
         public Drawer GameDrawer;
         private bool _firstRound = true;
@@ -65,7 +65,7 @@ namespace Poker
 
         protected override void LoadContent()
         {
-            UserInterface = new UI(WindowResolution, new ContentLoader(Content));
+            UserInterface = new GameUI(WindowResolution, new ContentLoader(Content));
             GameDrawer = new Drawer(UserInterface, new SpriteBatch(GraphicsDevice));
             
             UserInterface.ContentLoader.LoadTextures();
@@ -147,7 +147,7 @@ namespace Poker
                 && _previousMouseState.LeftButton == ButtonState.Released)
             {
                 var mousePos = GetMouseCoords();
-                if (!_client.User.HasBetted && _client.User.Cash > 0)
+                if (!_client.User.HasBetted && _client.User.Cash > 0 && !_client.User.HasLostRound && !_client.Opponent.HasLostRound)
                 {
                     foreach (var chipElement in UserInterface.ChipElements
                         .Where(chipElement => chipElement.Container.Contains(mousePos)))
@@ -178,7 +178,8 @@ namespace Poker
 
                 for (var i = 0; i < UserInterface.ButtonElements.Count; i++)
                 {
-                    if (UserInterface.ButtonElements[i].Container.Contains(mousePos))
+                    if (UserInterface.ButtonElements[i].Container.Contains(mousePos) 
+                        && !_client.User.HasLostRound && !_client.Opponent.HasLostRound)
                     {
                         switch (i)
                         {
@@ -257,7 +258,7 @@ namespace Poker
                 WindowResolution.Scale);
             
             // Draw Cards
-            if (UserInterface.UserCardElements?.Count == UI.UserCardsAmount)
+            if (UserInterface.UserCardElements?.Count == GameUI.UserCardsAmount)
             {
                 foreach (var userCardElement in UserInterface.UserCardElements)
                 {
@@ -265,7 +266,7 @@ namespace Poker
                 }
             }
             
-            if (UserInterface.OpponentCardElements?.Count == UI.UserCardsAmount)
+            if (UserInterface.OpponentCardElements?.Count == GameUI.UserCardsAmount)
             {
                 foreach (var opponentCardElement in UserInterface.OpponentCardElements)
                 {

@@ -17,62 +17,93 @@ namespace Poker
         public bool RoundEnded;
         public bool UsersHaveChanged;
         public bool TableHasChanged;
+        private int _defaultCash;
 
         // If you change these, things will break (so don't)
         private const int MaxPlayers = 2;
         private const int UserCardsAmount = 2;
 
-        public GameServerLogic(ref Table table, ref Deck deck, ref List<User> users)
+        public GameServerLogic(ref Table table, ref Deck deck, ref List<User> users, int defaultCash)
         {
             _table = table;
             _deck = deck;
             _users = users;
+            _defaultCash = defaultCash;
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
         public void ProcessRound()
         {
             TableHasChanged = false;
             UsersHaveChanged = false;
-
+            if (RoundEnded) return;
+            
             ProcessBets();
 
-            if (_users.Count != MaxPlayers || !_users.All(user => user.HasBetted) ||
-                !_users.All(user => user.BetIsProcessed.All(bet => bet)) ||
-                _users[0].Bets.Sum() != _users[1].Bets.Sum()) return;
+            if (AnyUserHasFolded())
+            {
+                RoundEnded = true;
+                ActiveTableCardsAmount = 5;
+            }
+            else
+            {
+                if (_users.Count != MaxPlayers || !_users.All(user => user.HasBetted) ||
+                    !_users.All(user => user.BetIsProcessed.All(bet => bet)) ||
+                    _users[0].Bets.Sum() != _users[1].Bets.Sum()) return;
+            }
 
             AddActiveTableCards();
+            
 
             if (RoundEnded)
             {
-                DetermineRoundLoser();
+                TableHasChanged = true;
+                UsersHaveChanged = true;
+
                 if (_users.All(user => !user.HasLostRound))
                 {
-                    Logger.Info("The round was a tie, splitting the pot.");
-                    _users[0].Cash += _table.Pot / 2;
-                    _users[1].Cash += _table.Pot / 2;
-                    _table.Pot = 0;
+                    DetermineRoundLoser();
+                    if (_users.All(user => !user.HasLostRound))
+                    {
+                        Logger.Info("The round was a tie, splitting the pot.");
+                        _users[0].Cash += _table.Pot / 2;
+                        _users[1].Cash += _table.Pot / 2;
+                        _table.Pot = 0;
+                    }
+                    else
+                    {
+                        if (_users[0].HasLostRound)
+                        {
+                            Logger.Info($"{_users[1].Name} won the round with a {_handResolver2.BestHand} against " +
+                                        $"{_users[0].Name}'s {_handResolver1.BestHand}" +
+                                        (_decidedUsingKickers ? " (decided with kickers)" : ""));
+                            _users[1].Cash += _table.Pot;
+                        }
+                        else
+                        {
+                            Logger.Info($"{_users[0].Name} won the round with a {_handResolver1.BestHand} against " +
+                                        $"{_users[1].Name}'s {_handResolver2.BestHand}" +
+                                        (_decidedUsingKickers ? " (decided with kickers)" : ""));
+                            _users[0].Cash += _table.Pot;
+                        }
+                    }
                 }
                 else
                 {
                     if (_users[0].HasLostRound)
                     {
-                        Logger.Info($"{_users[1].Name} won the round with a {_handResolver2.BestHand} against " +
-                                    $"{_users[0].Name}'s {_handResolver1.BestHand}" +
-                                    (_decidedUsingKickers ? " (decided with kickers)" : ""));
+                        Logger.Info($"{_users[0].Name} has folded so {_users[1].Name} wins the round");
                         _users[1].Cash += _table.Pot;
                     }
                     else
                     {
-                        Logger.Info($"{_users[0].Name} won the round with a {_handResolver1.BestHand} against " +
-                                    $"{_users[1].Name}'s {_handResolver2.BestHand}" +
-                                    (_decidedUsingKickers ? " (decided with kickers)" : ""));
+                        Logger.Info($"{_users[1].Name} has folded so {_users[0].Name} wins the round");
                         _users[0].Cash += _table.Pot;
                     }
-
-                    _table.Pot = 0;
                 }
-                TableHasChanged = true;
-                UsersHaveChanged = true;
+                _table.Pot = 0;
             }
 
             if (AnyUserHasLostGame())
@@ -80,6 +111,22 @@ namespace Poker
                 ResetGame();
                 TableHasChanged = true;
                 UsersHaveChanged = true;
+            }
+        }
+        
+        /// <summary>
+        /// Processes the bets from each user.
+        /// </summary>
+        private void ProcessBets()
+        {
+            foreach (var user in _users.Where(user => user.HasBetted && !user.BetIsProcessed[^1]))
+            {
+                user.HasAddedBet = false;
+                _table.Pot += user.Bets[^1];
+                user.Cash -= user.Bets[^1];
+                user.BetIsProcessed[^1] = true;
+                UsersHaveChanged = true;
+                TableHasChanged = true;
             }
         }
 
@@ -187,19 +234,12 @@ namespace Poker
             return _users.Any(user => user.HasLostGame);
         }
 
-        /// <summary>
-        /// Processes the bets from each user.
-        /// </summary>
-        private void ProcessBets()
+        private bool AnyUserHasFolded()
         {
-            foreach (var user in _users.Where(user => user.HasBetted && !user.BetIsProcessed[^1]))
+            if (!_users.Any(user => user.HasFolded)) return false;
             {
-                user.HasAddedBet = false;
-                _table.Pot += user.Bets[^1];
-                user.Cash -= user.Bets[^1];
-                user.BetIsProcessed[^1] = true;
-                UsersHaveChanged = true;
-                TableHasChanged = true;
+                _users.First(user => user.HasFolded).HasLostRound = true;
+                return true;
             }
         }
 
@@ -242,7 +282,7 @@ namespace Poker
             ResetRound();
             foreach (var user in _users)
             {
-                user.Cash = 1000;
+                user.Cash = _defaultCash;
             }
         }
     }
